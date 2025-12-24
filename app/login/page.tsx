@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, Eye, EyeOff, Package } from "lucide-react";
+import { LogIn, Eye, EyeOff, Package, AlertCircle } from "lucide-react";
+import { login } from "@/lib/services/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,25 +19,36 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await login(email, password);
 
-      const data = await response.json();
+      if (data.token) {
+        // Save token to localStorage
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
 
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+        // Redirect to dashboard
+        router.push("/");
+        router.refresh();
+      } else {
+        throw new Error("Invalid response from server");
       }
-
-      // Redirect to dashboard
-      router.push("/");
-      router.refresh();
     } catch (err: any) {
-      setError(err.message || "Invalid email or password");
+      console.error("Login error:", err);
+      
+      // Better error messages
+      let errorMessage = "Something went wrong. Please try again.";
+      
+      if (err.message.includes("fetch failed") || err.message.includes("ECONNREFUSED")) {
+        errorMessage = "Cannot connect to server. Please make sure the backend is running on port 8000.";
+      } else if (err.message.includes("timeout")) {
+        errorMessage = "Request timeout. Please check your connection.";
+      } else if (err.message.includes("Invalid credentials")) {
+        errorMessage = "Invalid email or password.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -63,8 +75,12 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-6">
             {/* Error Message */}
             {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+                <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-900 dark:text-red-200 mb-1">Login Failed</p>
+                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                </div>
               </div>
             )}
 
@@ -77,11 +93,10 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 dark:text-white"
-                placeholder="admin@example.com"
                 required
-                autoComplete="email"
-                autoFocus
+                disabled={loading}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="admin@balkar.com"
               />
             </div>
 
@@ -95,58 +110,50 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 dark:text-white pr-12"
-                  placeholder="Enter your password"
                   required
-                  autoComplete="current-password"
+                  disabled={loading}
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 dark:text-white pr-12 disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  disabled={loading}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
 
-            {/* Remember Me */}
+            {/* Remember Me & Forgot Password */}
             <div className="flex items-center justify-between">
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 text-orange-500 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2"
+                  className="w-4 h-4 text-orange-500 bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700 rounded focus:ring-orange-500 focus:ring-2"
                 />
                 <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                   Remember me
                 </span>
               </label>
+              <a
+                href="#"
+                className="text-sm text-orange-500 hover:text-orange-600 dark:hover:text-orange-400"
+              >
+                Forgot password?
+              </a>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Signing in...</span>
                 </>
               ) : (
@@ -159,22 +166,22 @@ export default function LoginPage() {
           </form>
 
           {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <p className="text-xs font-medium text-blue-800 dark:text-blue-400 mb-2">
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
               Demo Credentials:
             </p>
-            <p className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-              Email: admin@balkar.com
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              Email: <span className="font-mono">admin@balkar.com</span>
             </p>
-            <p className="text-xs text-blue-600 dark:text-blue-400 font-mono">
-              Password: admin123
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              Password: <span className="font-mono">admin123</span>
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-8">
-          Balkar Bucket v1.0.0 &copy; 2025
+        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-8">
+          © 2024 Balkar Bucket. All rights reserved.
         </p>
       </div>
     </div>
